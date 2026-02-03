@@ -1,0 +1,11 @@
+streamlit
+fastapi
+uvicorn
+opencv-python-headless
+numpy-stl
+transformers
+torch
+pinecone-client
+python-dotenv
+requests
+pinecone
