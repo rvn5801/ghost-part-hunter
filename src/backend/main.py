@@ -30,6 +30,7 @@ class SearchResult(BaseModel):
     name: str
     score: float
     thumbnail_url: str
+    stl_path: str   # <--- NEW FIELD added here
     dimensions: Dict[str, Optional[float]]
     size_match: str 
 
@@ -37,13 +38,9 @@ class SearchResult(BaseModel):
 async def search_part(file: UploadFile = File(...)):
     print(f"\n--- 🔍 NEW SEARCH REQUEST: {file.filename} ---")
     
-    # 1. Read Image
     content = await file.read()
-    
-    # 2. Vision
     pixels_per_mm, processed_img = CoinDetector.get_scale_factor(content)
 
-    # 3. AI: Generate Embedding
     try:
         pil_image = Image.open(io.BytesIO(content))
         query_vector = embedder.get_image_embedding(pil_image)
@@ -51,96 +48,42 @@ async def search_part(file: UploadFile = File(...)):
         print(f"❌ ERROR in Embedding: {e}")
         raise HTTPException(status_code=400, detail=f"Invalid image file: {e}")
 
-    # 4. Database: Search with Namespace Auto-Detection
-    print("4. Sending query to Pinecone...")
+    # Pylance Fix: Check connection
+    if vector_db.index is None:
+        raise HTTPException(status_code=500, detail="Database Connection Error")
+    
     try:
-        # Step 4a: Check where data lives
-        # We do this every time for safety, or you could cache it.
-        stats = vector_db.index.describe_index_stats()
-        
-        # Safe namespace extraction
-        namespaces = {}
-        if isinstance(stats, dict):
-            namespaces = stats.get('namespaces', {})
-        elif hasattr(stats, 'namespaces'):
-            namespaces = getattr(stats, 'namespaces', {})
-            
-        # Determine target namespace
-        # If we see '__default__', we might need to query it explicitly, 
-        # or use empty string if it maps to that.
-        target_namespace = "" # Default assumption
-        
-        if '__default__' in namespaces:
-             # Pinecone quirk: sometimes you need to query without a name to hit __default__,
-             # sometimes you query '__default__' explicitly. 
-             # We will try the generic query first, if that fails, we try specific.
-             pass
-             
-        # Step 4b: Perform Search
-        # We search blindly first (implicit default)
-        raw_results = vector_db.search(query_vector, top_k=20)
-        
-        # Validate results
-        matches = []
-        
-        # Helper to extract matches safely
-        def extract_matches(res_obj):
-            if isinstance(res_obj, dict):
-                return res_obj.get('matches', [])
-            elif hasattr(res_obj, 'matches'):
-                return getattr(res_obj, 'matches', [])
-            elif hasattr(res_obj, 'to_dict'):
-                return res_obj.to_dict().get('matches', [])
-            return []
-
-        matches = extract_matches(raw_results)
-
-        # If implicit default returned nothing, try explicit namespaces
-        if not matches and namespaces:
-            print(f"   -> Default query empty. Trying namespaces: {list(namespaces.keys())}")
-            for ns in namespaces:
-                # If the key is literally '__default__', sometimes passing it as a string works
-                # if the Implicit "" didn't work.
-                print(f"   -> Retrying in namespace: '{ns}'")
-                
-                # We need to manually call the index because our wrapper might not expose namespace arg easily
-                # Accessing the raw index object from the wrapper
-                try:
-                    raw_res_ns = vector_db.index.query(
-                        vector=query_vector, 
-                        top_k=20, 
-                        include_metadata=True, 
-                        namespace=ns
-                    )
-                    matches = extract_matches(raw_res_ns)
-                    if matches:
-                        print(f"   ✅ Found {len(matches)} matches in '{ns}'!")
-                        break
-                except Exception as inner_e:
-                    print(f"   -> Failed querying namespace {ns}: {inner_e}")
-
+        raw_results = vector_db.index.query(
+            vector=query_vector, 
+            top_k=20, 
+            include_metadata=True,
+            namespace="" 
+        )
     except Exception as e:
         print(f"❌ ERROR in Pinecone Search: {e}")
         return []
 
+    results_obj: Any = raw_results
+    matches = []
+
+    if isinstance(results_obj, dict):
+        matches = results_obj.get('matches', [])
+    elif hasattr(results_obj, 'matches'):
+        matches = getattr(results_obj, 'matches', [])
+    elif hasattr(results_obj, 'to_dict'):
+        matches = results_obj.to_dict().get('matches', [])
+
     print(f"6. Matches found: {len(matches)}")
 
-    # 5. Parse Results
     output = []
     for match in matches:
-        # Handle individual match objects safely
-        match_obj: Any = match
-        match_data = {}
+        match_data: Any = match
         
-        if isinstance(match_obj, dict):
-            match_data = match_obj
-        elif hasattr(match_obj, 'to_dict'):
-            match_data = match_obj.to_dict()
-        else:
-            try:
-                match_data = dict(match_obj)
-            except:
-                continue
+        if hasattr(match_data, 'to_dict'):
+            match_data = match_data.to_dict()
+        elif not isinstance(match_data, dict):
+             try: match_data = dict(match_data)
+             except: continue
 
         meta = match_data.get('metadata', {})
         score = match_data.get('score', 0.0)
@@ -150,6 +93,7 @@ async def search_part(file: UploadFile = File(...)):
             name=meta.get('name', 'Unknown'),
             score=score,
             thumbnail_url=meta.get('thumbnail_path', ''),
+            stl_path=meta.get('stl_path', ''),  # <--- NEW: Extract STL path from metadata
             dimensions={
                 "x": meta.get('width_mm'),
                 "y": meta.get('depth_mm'),
