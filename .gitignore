@@ -6,3 +6,5 @@ __pycache__/
 !/data/.gitkeep
 /venv/
 .pytest_cache/
+service-account*.json
+.json

@@ -1,4 +1,10 @@
+import os
 
+# 1. Define the path to the stubborn file
+target_path = os.path.join("src", "core", "embedding", "clip_model.py")
+
+# 2. Define the CORRECT code (The V2.0 Fix)
+new_code = """
 from transformers import CLIPProcessor, CLIPModel
 from PIL import Image
 import torch
@@ -11,6 +17,9 @@ logger = logging.getLogger(__name__)
 
 class ClipEmbedder:
     def __init__(self):
+        # --- PROOF OF LIFE PRINT ---
+        print("\\n\\n🔥🔥🔥 V2.0 CODE LOADED SUCCESSFULLY - ZOMBIE KILLED 🔥🔥🔥\\n\\n") 
+        
         logger.info("Loading CLIP model...")
         model_id = "openai/clip-vit-base-patch32"
         
@@ -23,46 +32,18 @@ class ClipEmbedder:
             logger.error(f"❌ Failed to load CLIP model: {e}")
             raise e
 
-    def _get_tensor_from_output(self, output: Any) -> torch.Tensor:
-        """
-        Safety Valve: Extracts the tensor regardless of what the model returns.
-        """
-        # 1. If it is already a tensor (The ideal case), return it
-        if isinstance(output, torch.Tensor):
-            return output
-        
-        # 2. If it is a CLIPOutput object, grab the correct attribute
-        if hasattr(output, "image_embeds"):
-            return output.image_embeds
-        if hasattr(output, "text_embeds"):
-            return output.text_embeds
-            
-        # 3. If it is a BaseModelOutput (The Error Case), grab pooler_output
-        if hasattr(output, "pooler_output"):
-            return output.pooler_output
-            
-        # 4. Fallback: Try to treat it as a tuple (older versions)
-        if isinstance(output, tuple):
-            return output[0]
-
-        # If we get here, we really do not know what it is
-        raise ValueError(f"Unknown output type: {type(output)}")
-
     def get_image_embedding(self, image: Image.Image):
         try:
-            # type: ignore suppresses VS Code warnings
+            # type: ignore suppresses VS Code errors
             inputs = self.processor(images=image, return_tensors="pt", padding=True) # type: ignore
             
             with torch.no_grad():
-                # We use the standard call now
-                raw_output = self.model.get_image_features(**inputs)
+                # CRITICAL FIX: Explicitly get features as Tensor
+                image_features = self.model.get_image_features(**inputs)
                 
-                # SELF-HEAL: Extract the tensor safely using our helper
-                tensor_features = self._get_tensor_from_output(raw_output)
+                # Force cast to Tensor for safety
+                tensor_features = cast(torch.Tensor, image_features)
                 
-                # Cast to Tensor for type checkers
-                tensor_features = cast(torch.Tensor, tensor_features)
-
                 # Normalize
                 norm = tensor_features.norm(p=2, dim=-1, keepdim=True)
                 normalized_features = tensor_features / norm
@@ -78,15 +59,9 @@ class ClipEmbedder:
             inputs = self.processor(text=[text], return_tensors="pt", padding=True) # type: ignore
             
             with torch.no_grad():
-                raw_output = self.model.get_text_features(**inputs)
+                text_features = self.model.get_text_features(**inputs)
+                tensor_features = cast(torch.Tensor, text_features)
                 
-                # SELF-HEAL: Extract the tensor safely
-                tensor_features = self._get_tensor_from_output(raw_output)
-                
-                # Cast to Tensor
-                tensor_features = cast(torch.Tensor, tensor_features)
-
-                # Normalize
                 norm = tensor_features.norm(p=2, dim=-1, keepdim=True)
                 normalized_features = tensor_features / norm
                 
@@ -94,3 +69,12 @@ class ClipEmbedder:
         except Exception as e:
             logger.error(f"Error embedding text: {e}")
             return [0.0] * 512
+"""
+
+# 3. Force Write the File
+print(f"Overwriting {target_path}...")
+with open(target_path, "w", encoding="utf-8") as f:
+    f.write(new_code)
+
+print("✅ SUCCESS! The file has been forcibly updated.")
+print("Now run 'python -m src.backend.main'")

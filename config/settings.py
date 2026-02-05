@@ -19,6 +19,8 @@ class Settings:
     RAW_DATA_DIR = DATA_DIR / "raw"
     PROCESSED_DATA_DIR = DATA_DIR / "processed"
 
+    GOOGLE_API_KEY = os.getenv("GEMINI_API_KEY")
+
     # Thingiverse API
     THINGIVERSE_TOKEN = os.getenv("THINGIVERSE_TOKEN")
     THINGIVERSE_API_BASE = "https://api.thingiverse.com"

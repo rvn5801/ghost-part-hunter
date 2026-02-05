@@ -1,11 +1,28 @@
-streamlit
+# --- Core AI & Vision ---
+# CPU version of Torch is smaller and safer for Cloud deployment
+torch --index-url https://download.pytorch.org/whl/cpu
+torchvision --index-url https://download.pytorch.org/whl/cpu
+
+# The magic tool for background removal
+rembg
+onnxruntime
+
+# Computer Vision helpers
+opencv-python
+Pillow
+numpy
+
+# --- Backend & Database ---
+# The specific version that fixes the import errors
+pinecone-client==3.1.0
+transformers
+python-dotenv
 fastapi
 uvicorn
-opencv-python-headless
-numpy-stl
-transformers
-torch
-pinecone-client
-python-dotenv
+python-multipart
 requests
-pinecone
+
+# --- Frontend ---
+streamlit
+
+google-cloud-aiplatform

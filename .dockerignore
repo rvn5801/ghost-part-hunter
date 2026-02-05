@@ -1,0 +1,15 @@
+# Ignore Git history
+.git/
+.gitignore
+
+# Ignore Virtual Environment (CRITICAL)
+venv/
+.venv/
+env/
+
+# Ignore Local Data (Don't upload 1GB of images)
+data/
+__pycache__/
+*.pyc
+.env
+service-account.json
